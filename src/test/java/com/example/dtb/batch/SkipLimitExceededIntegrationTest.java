@@ -12,6 +12,7 @@ import org.springframework.batch.test.JobRepositoryTestUtils;
 import org.springframework.batch.test.context.SpringBatchTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBatchTest
 @SpringBootTest
+@ActiveProfiles("test")
 @TestPropertySource(properties = "batch.input.file=classpath:transactions-exceed-skiplimit.csv")
 class SkipLimitExceededIntegrationTest {
 
