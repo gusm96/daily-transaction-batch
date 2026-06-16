@@ -90,7 +90,7 @@ src/main/java/com/example/dtb
 2. **내결함성** — Skip / Retry / SkipListener 적용
 3. **재시작 & 멱등성** — JobRepository 기반 재시작, 중복 처리 방지
 4. **확장(Scaling)** — 멀티스레드 Step → 파티셔닝으로 처리량 향상 ✅
-5. **집계 Step** — 사용자/일자별 거래 집계 Step 추가
+5. **집계 Step** — 사용자/일자별 거래 집계 Step 추가 ✅
 
 ---
 
@@ -143,6 +143,48 @@ partitionedTransactionStep (master)
 | 진행 상황 추적 | Step 1개의 카운터 | 워커 Step별 독립 실행 이력 |
 | 재시작 | 마지막 커밋 지점부터 | 실패한 파티션만 재시작 가능 |
 
+
+---
+
+## 📊 Phase 5: 집계 Step
+
+`dailyFullBatchJob`은 기존 로딩 Step 뒤에 집계 Step을 체이닝한 2-Step Job입니다.
+
+```
+[transactions.csv]
+     │
+     ▼  Step 1 — transactionStep (FlatFileItemReader → Processor → JpaItemWriter)
+     │
+[dtb_transaction]
+     │
+     ▼  Step 2 — aggregationStep (JdbcCursorItemReader + GROUP BY → JpaItemWriter)
+     │
+[dtb_user_daily_summary]
+```
+
+### 집계 전략: SQL GROUP BY를 Reader 레벨에서 처리
+
+```sql
+SELECT user_id, created_at,
+       SUM(amount) AS total_amount,
+       COUNT(*)    AS tx_count
+FROM dtb_transaction
+GROUP BY user_id, created_at
+ORDER BY user_id, created_at
+```
+
+- DB가 집계를 담당하고 Spring Batch는 결과를 summary 테이블로 이동시킨다.
+- `JdbcCursorItemReader`로 SQL 결과를 스트리밍 → `Processor` 불필요.
+- `JpaItemWriter.merge()` + `(userId, txDate)` 복합 PK → 재실행 시 UPDATE로 멱등성 보장.
+
+### 결과 테이블: `dtb_user_daily_summary`
+
+| 컬럼 | 설명 |
+|------|------|
+| `user_id` | 사용자 ID (PK) |
+| `tx_date` | 거래 일자 (PK) |
+| `total_amount` | 해당 일자 총 거래금액 |
+| `tx_count` | 해당 일자 거래 건수 |
 
 ## 📚 참고
 
